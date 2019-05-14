@@ -181,8 +181,8 @@ end = struct
   let default_context_flags (ctx : Context.t) =
     let c = ctx.ocamlc_cflags in
     let cxx =
-        List.filter ctx.ocamlc_cflags
-          ~f:(fun s -> not (String.is_prefix s ~prefix:"-std=")) in
+      List.filter ctx.ocamlc_cflags
+        ~f:(fun s -> not (String.is_prefix s ~prefix:"-std=")) in
     C.Kind.Dict.make ~c ~cxx
 
   let c_flags t ~dir =
@@ -357,7 +357,7 @@ let create
       ~(context:Context.t)
       ?host
       ~projects
-     ~file_tree
+      ~file_tree
       ~packages
       ~stanzas
       ~external_lib_deps_mode
@@ -374,6 +374,15 @@ let create
           | Dune_file.Library lib -> Some (ctx_dir, lib)
           | _ -> None))
   in
+  let internal_implementations =
+    List.concat_map stanzas
+      ~f:(fun { Dune_load.Dune_file.stanzas; _ } ->
+        List.filter_map stanzas ~f:(fun stanza ->
+          match (stanza : Stanza.t) with
+          | Dune_file.Variant_implementation impl -> Some impl
+          | _ -> None)
+      )
+  in
   let scopes, public_libs =
     let lib_config = Context.lib_config context in
     Scope.DB.create
@@ -382,6 +391,7 @@ let create
       ~installed_libs
       ~lib_config
       internal_libs
+      internal_implementations
   in
   let stanzas =
     List.map stanzas
@@ -453,18 +463,18 @@ let create
       ~bin_artifacts_host:artifacts_host.bin
   in
   let env_context = { Env_context.
-    env;
-    profile = context.profile;
-    scopes;
-    context_env = context.env;
-    default_env;
-    stanzas_per_dir;
-    host = Option.map host ~f:(fun x -> x.env_context);
-    build_dir = context.build_dir;
-    context = context;
-    expander = expander;
-    bin_artifacts = artifacts.Artifacts.bin;
-  }
+                      env;
+                      profile = context.profile;
+                      scopes;
+                      context_env = context.env;
+                      default_env;
+                      stanzas_per_dir;
+                      host = Option.map host ~f:(fun x -> x.env_context);
+                      build_dir = context.build_dir;
+                      context = context;
+                      expander = expander;
+                      bin_artifacts = artifacts.Artifacts.bin;
+                    }
   in
   let dir_status_db = Dir_status.DB.make file_tree ~stanzas_per_dir in
   { context

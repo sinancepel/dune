@@ -450,22 +450,33 @@ module Toplevel : sig
     }
 end
 
+module Variant_implementation : sig
+  type t =
+    { implementation : Lib_name.t
+    ; virtual_lib : Lib_name.t
+    ; variant : Variant.t
+    ; project : Dune_project.t
+    ; loc : Loc.t
+    }
+end
+
 module Include_subdirs : sig
   type qualification = Unqualified | Qualified
   type t = No | Include of qualification
 end
 
 type Stanza.t +=
-  | Library         of Library.t
-  | Executables     of Executables.t
-  | Rule            of Rule.t
-  | Install         of File_binding.Unexpanded.t Install_conf.t
-  | Alias           of Alias_conf.t
-  | Copy_files      of Copy_files.t
-  | Documentation   of Documentation.t
-  | Tests           of Tests.t
-  | Include_subdirs of Loc.t * Include_subdirs.t
-  | Toplevel        of Toplevel.t
+  | Library                of Library.t
+  | Executables            of Executables.t
+  | Rule                   of Rule.t
+  | Install                of File_binding.Unexpanded.t Install_conf.t
+  | Alias                  of Alias_conf.t
+  | Copy_files             of Copy_files.t
+  | Documentation          of Documentation.t
+  | Tests                  of Tests.t
+  | Include_subdirs        of Loc.t * Include_subdirs.t
+  | Toplevel               of Toplevel.t
+  | Variant_implementation of Variant_implementation.t
 
 val stanza_package : Stanza.t -> Package.t option
 

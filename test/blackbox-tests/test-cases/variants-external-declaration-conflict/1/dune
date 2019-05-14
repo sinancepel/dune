@@ -1,0 +1,7 @@
+(library
+ (name vlibfoo)
+ (virtual_modules vlibfoo)
+)
+
+(external_variant (vlibfoo somevariant impl1))
+(external_variant (vlibfoo somevariant impl2))

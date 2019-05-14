@@ -61,6 +61,7 @@ type t = private
   ; virtual_         : Lib_modules.t Source.t option
   ; implements       : (Loc.t * Lib_name.t) option
   ; variant          : Variant.t option
+  ; known_implementations : (Loc.t * Lib_name.t) Variant.Map.t
   ; default_implementation  : (Loc.t * Lib_name.t) option
   ; wrapped          : Wrapped.t Dune_file.Library.Inherited.t option
   ; main_module_name : Dune_file.Library.Main_module_name.t
@@ -71,6 +72,7 @@ type t = private
 val of_library_stanza
   :  dir:Path.Build.t
   -> lib_config:Lib_config.t
+  -> (Variant.t * (Loc.t * Lib_name.t)) list
   -> Dune_file.Library.t
   -> t
 

@@ -206,8 +206,8 @@ module T = struct
     ; user_written_deps : Dune_file.Lib_deps.t
     ; implements        : t Or_exn.t option
     ; (* these fields cannot be forced until the library is instantiated *)
-      default_implementation : t Or_exn.t Lazy.t option
-    ; implementations   : t Or_exn.t list Variant.Map.t Lazy.t option
+      default_implementation     : t Or_exn.t Lazy.t option
+    ; resolved_implementations   : t Or_exn.t Variant.Map.t Lazy.t option
     ; (* This is mutable to avoid this error:
 
          {[
@@ -233,7 +233,6 @@ type status =
 type db =
   { parent               : db option
   ; resolve              : Lib_name.t -> resolve_result
-  ; find_implementations : Lib_name.t -> Lib_info.t list Variant.Map.t
   ; table                : (Lib_name.t, status) Hashtbl.t
   ; all                  : Lib_name.t list Lazy.t
   }
@@ -775,14 +774,16 @@ let find_implementation_for lib ~variants =
   | None -> Ok None
   | Some (loc, variants_set) ->
     let available_implementations =
-      Lazy.force (Option.value_exn lib.implementations)
+      Lazy.force (Option.value_exn lib.resolved_implementations)
     in
     let* candidates =
       Variant.Set.fold variants_set
         ~init:[]
         ~f:(fun variant acc ->
-          List.rev_append acc
-            (Variant.Map.Multi.find available_implementations variant))
+          match Variant.Map.find available_implementations variant with
+          | Some res -> res::acc
+          | None -> acc
+        )
       |> Result.List.all
     in
     match candidates with
@@ -796,16 +797,6 @@ let find_implementation_for lib ~variants =
                       ; given_variants = variants_set
                       ; conflict
                       }))
-
-let find_implementations db name =
-  let rec loop acc db =
-    let implementations = db.find_implementations name in
-    let acc = Variant.Map.Multi.rev_union acc implementations in
-    match db.parent with
-    | None -> acc
-    | Some db -> loop acc db
-  in
-  loop Variant.Map.empty db
 
 let rec instantiate db name (info : Lib_info.t) ~stack ~hidden =
   let id, stack =
@@ -832,22 +823,11 @@ let rec instantiate db name (info : Lib_info.t) ~stack ~hidden =
   in
   let default_implementation =
     Option.map info.default_implementation ~f:(fun l -> lazy (resolve l)) in
-  let implementations =
+  let resolved_implementations =
     Option.map info.virtual_ ~f:(fun _ -> lazy (
-      let available_implementations = find_implementations db name in
-      let seen_libs = ref Set.empty in
-      Variant.Map.map available_implementations ~f:(
-        List.filter_map ~f:(fun (impl : Lib_info.t) ->
-          match resolve (impl.loc, impl.name) with
-          | Error _ as e -> Some e
-          | Ok lib ->
-            if Set.mem !seen_libs lib then
-              None
-            else begin
-              seen_libs := Set.add !seen_libs lib;
-              Some (Ok lib)
-            end
-        ))))
+      Variant.Map.map info.known_implementations
+        ~f:(fun ((loc : Loc.t), (name : Lib_name.t)) -> resolve (loc, name))
+    ))
   in
   let requires, pps, resolved_selects =
     resolve_user_deps db info.requires ~allow_private_deps ~pps:info.pps ~stack
@@ -881,7 +861,7 @@ let rec instantiate db name (info : Lib_info.t) ~stack ~hidden =
     ; sub_systems       = Sub_system_name.Map.empty
     ; implements
     ; default_implementation
-    ; implementations
+    ; resolved_implementations
     }
   in
   t.sub_systems <-
@@ -1311,22 +1291,12 @@ module DB = struct
 
   type t = db
 
-  let create ?parent ~resolve ~find_implementations ~all () =
+  let create ?parent ~resolve ~all () =
     { parent
     ; resolve
-    ; find_implementations
     ; table  = Hashtbl.create 1024
     ; all    = Lazy.from_fun all
     }
-
-  let create_variant_map lib_info_list =
-    List.concat_map lib_info_list ~f:(fun (info : Lib_info.t) ->
-      match info.implements, info.variant with
-      | Some (_, virtual_lib), Some variant -> [virtual_lib, (variant, [info])]
-      | _, _ -> [])
-    |> List.map ~f:(fun (virtual_lib, content) ->
-      (virtual_lib, Variant.Map.of_list_exn [content]))
-    |> Lib_name.Map.of_list_reduce ~f:Variant.Map.Multi.rev_union
 
   (* implementations tagged with a variant are only variant when the they
      implement a virtual library from the same project. *)
@@ -1337,24 +1307,45 @@ module DB = struct
         | Some (loc, implements), Some variant ->
           if not (Lib_name.Map.mem libmap implements) then
             Errors.fail loc
-              "Library implementation %a for variant %a implements a library \
-               outside the project. This is forbidden."
-              Lib_name.pp implements Variant.pp variant
+              "Library implementation %a for variant %a implements a library @ \
+               outside the project.@ Instead of using (variant %a) here,@ you \
+               need to reference it in the virtual library definition, using @ \
+               (external_implementations (%a %a))."
+              Lib_name.pp implements Variant.pp variant Variant.pp variant
+              Variant.pp variant Lib_name.pp lib.name
+
         | _, _ -> ()
         end
       | Redirect (_, _) (* skip b/c [Found] covers *) -> ()
       | Hidden (_, _) -> assert false
       | Not_found -> assert false)
 
-  let create_from_library_stanzas ?parent ~lib_config stanzas =
+  let create_from_library_stanzas ?parent ~lib_config lib_stanzas
+        variants_stanzas =
+    (* Lookup the local scope to find implementations*)
+    let project_implementations =
+      let extract_variant = function
+        | _, ({ Dune_file.Library.implements=Some (loc, vlib)
+              ; variant=Some variant
+              ; _} as conf) -> Some (vlib, (variant, (loc, Dune_file.Library.best_name conf)))
+        | _ -> None
+      in
+      lib_stanzas
+      |> List.filter_map ~f:extract_variant
+    in
     let variant_map =
-      List.map stanzas ~f:(fun (dir, (conf : Dune_file.Library.t)) ->
-        Lib_info.of_library_stanza ~dir ~lib_config conf)
-      |> create_variant_map
+      variants_stanzas
+      |> List.map ~f:(fun { Dune_file.Variant_implementation.implementation
+                          ; virtual_lib; variant; loc; _} ->
+                       (virtual_lib, (variant, (loc, implementation))))
+      |> List.rev_append project_implementations
+      |> Lib_name.Map.of_list_multi
     in
     let map =
-      List.concat_map stanzas ~f:(fun (dir, (conf : Dune_file.Library.t)) ->
-        let info = Lib_info.of_library_stanza ~dir ~lib_config conf in
+      List.concat_map lib_stanzas ~f:(fun (dir, (conf : Dune_file.Library.t)) ->
+        let variants =  Lib_name.Map.Multi.find
+                          variant_map (Dune_file.Library.best_name conf) in
+        let info = Lib_info.of_library_stanza ~dir ~lib_config variants conf in
         match conf.public with
         | None ->
           [Dune_file.Library.best_name conf, Resolve_result.Found info]
@@ -1371,13 +1362,14 @@ module DB = struct
       | Ok x -> x
       | Error (name, _, _) ->
         match
-          List.filter_map stanzas ~f:(fun (_, (conf : Dune_file.Library.t)) ->
-            if Lib_name.equal name (Lib_name.of_local conf.name) ||
-               match conf.public with
-               | None -> false
-               | Some p -> Lib_name.equal name (Dune_file.Public_lib.name p)
-            then Some conf.buildable.loc
-            else None)
+          List.filter_map lib_stanzas
+            ~f:(fun (_, (conf : Dune_file.Library.t)) ->
+              if Lib_name.equal name (Lib_name.of_local conf.name) ||
+                 match conf.public with
+                 | None -> false
+                 | Some p -> Lib_name.equal name (Dune_file.Public_lib.name p)
+              then Some conf.buildable.loc
+              else None)
         with
         | [] | [_] -> assert false
         | loc1 :: loc2 :: _ ->
@@ -1393,17 +1385,9 @@ module DB = struct
       ~resolve:(fun name ->
         Lib_name.Map.find map name
         |> Option.value ~default:Not_found)
-      ~find_implementations:(fun virt ->
-        Lib_name.Map.find variant_map virt
-        |> Option.value ~default:Variant.Map.empty)
       ~all:(fun () -> Lib_name.Map.keys map)
 
   let create_from_findlib ?(external_lib_deps_mode=false) findlib =
-    let variant_map = lazy (
-      Findlib.all_packages findlib
-      |> List.map ~f:Lib_info.of_dune_lib
-      |> create_variant_map
-    ) in
     create ()
       ~resolve:(fun name ->
         match Findlib.find findlib name with
@@ -1418,17 +1402,12 @@ module DB = struct
               Not_found
           | Hidden pkg ->
             Hidden (Lib_info.of_dune_lib pkg, "unsatisfied 'exist_if'"))
-      ~find_implementations:(fun virt ->
-        Lib_name.Map.find (Lazy.force variant_map) virt
-        |> Option.value ~default:Variant.Map.empty)
       ~all:(fun () ->
         Findlib.all_packages findlib
         |> List.map ~f:Dune_package.Lib.name)
 
   let find = find
   let find_even_when_hidden = find_even_when_hidden
-
-  let find_implementations t = t.find_implementations
 
   let resolve t (loc, name) =
     match find t name with
@@ -1578,7 +1557,6 @@ let report_lib_error ppf (e : Error.t) =
            | Some x -> x
            | None -> Variant.make "err")))
       conflict
-
   | Double_implementation { impl1; impl2; vlib } ->
     Format.fprintf ppf
       "@[<v>@{<error>Error@}: \
@@ -1672,7 +1650,7 @@ let () =
       Some (Report_error.make_printer ?loc ?hint pp)
     | _ -> None)
 
-let to_dune_lib ({ name ; info ; _ } as lib) ~lib_modules ~foreign_objects ~dir =
+let to_dune_lib ({ name ; info ; _ } as lib) ~lib_modules ~foreign_objects ~dir=
   let add_loc = List.map ~f:(fun x -> (info.loc, x.name)) in
   let virtual_ = Option.is_some info.virtual_ in
   let obj_dir = Obj_dir.convert_to_external ~dir (obj_dir lib) in
@@ -1695,6 +1673,11 @@ let to_dune_lib ({ name ; info ; _ } as lib) ~lib_modules ~foreign_objects ~dir 
     | External f -> f
     | Local -> foreign_objects
   in
+  let known_implementations =
+    info.known_implementations
+    |> Variant.Map.to_list
+    |> List.map ~f:(fun (v,(l,n)) -> (l,(v,n)))
+  in
   Dune_package.Lib.make
     ~obj_dir
     ~orig_src_dir
@@ -1712,7 +1695,7 @@ let to_dune_lib ({ name ; info ; _ } as lib) ~lib_modules ~foreign_objects ~dir 
     ~ppx_runtime_deps:(add_loc (ppx_runtime_deps_exn lib))
     ~modes:info.modes
     ~implements:info.implements
-    ~variant:info.variant
+    ~known_implementations
     ~default_implementation:info.default_implementation
     ~virtual_
     ~modules:(Some lib_modules)

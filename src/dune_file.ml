@@ -55,7 +55,7 @@ let library_variants =
   let syntax =
     Syntax.create ~name:"library_variants"
       ~desc:"the experimental library variants feature."
-      [ (0, 1) ]
+      [ (0, 2) ]
   in
   Dune_project.Extension.register_simple ~experimental:true
     syntax (Dune_lang.Decoder.return []);
@@ -998,7 +998,7 @@ module Library = struct
            "A library cannot be both virtual and implement %s"
            (Lib_name.to_string impl));
        match virtual_modules, default_implementation with
-       | None, Some (loc, _) ->
+       | None, (Some (loc, _)) ->
          of_sexp_error loc
            "Only virtual libraries can specify a default implementation."
        | _ -> ();
@@ -2085,6 +2085,29 @@ module Toplevel = struct
     )
 end
 
+module Variant_implementation = struct
+  type t =
+    { implementation : Lib_name.t
+    ; virtual_lib : Lib_name.t
+    ; variant : Variant.t
+    ; project : Dune_project.t
+    ; loc : Loc.t
+    }
+
+  let decode =
+    let open Stanza.Decoder in
+    let+ (loc, (virtual_lib, variant,implementation)) = located
+      (triple Lib_name.decode Variant.decode Lib_name.decode)
+    and+ project = Dune_project.get_exn ()
+    in
+    { implementation
+    ; virtual_lib
+    ; variant
+    ; project
+    ; loc
+    }
+end
+
 module Copy_files = struct
   type t = { add_line_directive : bool
            ; glob : String_with_vars.t
@@ -2128,16 +2151,17 @@ module Include_subdirs = struct
 end
 
 type Stanza.t +=
-  | Library         of Library.t
-  | Executables     of Executables.t
-  | Rule            of Rule.t
-  | Install         of File_binding.Unexpanded.t Install_conf.t
-  | Alias           of Alias_conf.t
-  | Copy_files      of Copy_files.t
-  | Documentation   of Documentation.t
-  | Tests           of Tests.t
-  | Include_subdirs of Loc.t * Include_subdirs.t
-  | Toplevel        of Toplevel.t
+  | Library                of Library.t
+  | Executables            of Executables.t
+  | Rule                   of Rule.t
+  | Install                of File_binding.Unexpanded.t Install_conf.t
+  | Alias                  of Alias_conf.t
+  | Copy_files             of Copy_files.t
+  | Documentation          of Documentation.t
+  | Tests                  of Tests.t
+  | Include_subdirs        of Loc.t * Include_subdirs.t
+  | Toplevel               of Toplevel.t
+  | Variant_implementation of Variant_implementation.t
 
 module Stanzas = struct
   type t = Stanza.t list
@@ -2206,6 +2230,10 @@ module Stanzas = struct
       (let+ () = Syntax.since Stanza.syntax (1, 0)
        and+ t = Tests.single in
        [Tests t])
+    ; "external_variant",
+      (let+ () = Syntax.since library_variants (0, 2)
+       and+ t = Variant_implementation.decode in
+       [Variant_implementation t])
     ; "env",
       (let+ x = Dune_env.Stanza.decode in
        [Dune_env.T x])

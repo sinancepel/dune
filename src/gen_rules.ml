@@ -295,11 +295,47 @@ module type Gen = sig
   val sctx : Super_context.t
 end
 
-let relevant_stanzas pkgs stanzas =
-  List.filter stanzas ~f:(fun stanza ->
+let map_variant relevant_lib_names lib =
+  match lib with
+  | { Library.variant=(Some variant)
+    ; implements=(Some (loc, vlib))
+    ; project
+    ; _} as conf ->
+    Option.some_if
+      (Lib_name.Set.mem relevant_lib_names vlib)
+      (Variant_implementation
+         { implementation = (Library.best_name conf)
+         ; virtual_lib = vlib
+         ; variant
+         ; project
+         ; loc
+         })
+  | _ -> None
+
+let map_stanza relevant_lib_names = function
+  | Library lib -> map_variant relevant_lib_names lib
+  | _ -> None
+
+let build_name_set pkgs stanzas =
+  stanzas
+  |> List.filter_map
+       ~f:(function
+         | Library
+             ({ public = Some { package; _ }
+              ; _
+              } as conf)
+           when (Package.Name.Set.mem pkgs package.name) ->
+           Some (Library.best_name conf)
+         | _ -> None)
+  |> Lib_name.Set.of_list
+
+let relevant_stanzas relevant_lib_names pkgs stanzas =
+  List.filter_map stanzas ~f:(fun stanza ->
     match Dune_file.stanza_package stanza with
-    | Some package -> Package.Name.Set.mem pkgs package.name
-    | None -> true)
+    | Some package when Package.Name.Set.mem pkgs package.name -> Some stanza
+    | None -> Some stanza
+    | Some _ -> map_stanza relevant_lib_names stanza
+  )
 
 let gen ~contexts
       ?(external_lib_deps_mode=false)
@@ -324,14 +360,20 @@ let gen ~contexts
         Fiber.Ivar.read (Hashtbl.find_exn sctxs h.name)
         >>| Option.some
     in
+
     let stanzas () =
       let+ stanzas = Dune_load.Dune_files.eval ~context dune_files in
       match only_packages with
       | None -> stanzas
       | Some pkgs ->
+        let relevant_lib_names =
+          stanzas
+          |> List.concat_map ~f:(fun (dir_conf : Dune_load.Dune_file.t) -> dir_conf.stanzas)
+          |> build_name_set pkgs
+        in
         List.map stanzas ~f:(fun (dir_conf : Dune_load.Dune_file.t) ->
           { dir_conf with
-            stanzas = relevant_stanzas pkgs dir_conf.stanzas
+            stanzas = relevant_stanzas relevant_lib_names pkgs dir_conf.stanzas
           })
     in
     let* (host, stanzas) = Fiber.fork_and_join host stanzas in

@@ -19,9 +19,9 @@ module Lib = struct
     ; ppx_runtime_deps : (Loc.t * Lib_name.t) list
     ; sub_systems      : 'sub_system Sub_system_name.Map.t
     ; virtual_         : bool
-    ; implements       : (Loc.t * Lib_name.t) option
-    ; variant          : Variant.t option
+    ; known_implementations : (Loc.t * (Variant.t * Lib_name.t)) list
     ; default_implementation  : (Loc.t * Lib_name.t)  option
+    ; implements       : (Loc.t * Lib_name.t) option
     ; modules          : Lib_modules.t option
     ; main_module_name : Module.Name.t option
     ; requires         : (Loc.t * Lib_name.t) list
@@ -33,8 +33,8 @@ module Lib = struct
 
   let make ~loc ~kind ~name ~synopsis ~archives ~plugins ~foreign_objects
         ~foreign_archives ~jsoo_runtime ~main_module_name ~sub_systems
-        ~requires ~ppx_runtime_deps ~implements ~variant
-        ~default_implementation ~virtual_ ~modules ~modes
+        ~requires ~ppx_runtime_deps ~implements
+        ~default_implementation ~virtual_ ~known_implementations ~modules ~modes
         ~version ~orig_src_dir ~obj_dir
         ~special_builtin_support =
     let dir = Obj_dir.dir obj_dir in
@@ -60,11 +60,11 @@ module Lib = struct
     ; requires
     ; ppx_runtime_deps
     ; implements
-    ; variant
-    ; default_implementation
     ; version
     ; orig_src_dir
     ; virtual_
+    ; known_implementations
+    ; default_implementation
     ; modules
     ; modes
     ; obj_dir
@@ -85,8 +85,8 @@ module Lib = struct
   let encode ~package_root
         { loc = _ ; kind ; synopsis ; name ; archives ; plugins
         ; foreign_objects ; foreign_archives ; jsoo_runtime ; requires
-        ; ppx_runtime_deps ; sub_systems ; virtual_
-        ; implements ; variant ; default_implementation
+        ; ppx_runtime_deps ; sub_systems ; virtual_ ; known_implementations
+        ; implements ; default_implementation
         ; main_module_name ; version = _; obj_dir ; orig_src_dir
         ; modules ; modes ; special_builtin_support
         } =
@@ -111,7 +111,8 @@ module Lib = struct
     ; libs "requires" requires
     ; libs "ppx_runtime_deps" ppx_runtime_deps
     ; field_o "implements" (no_loc Lib_name.encode) implements
-    ; field_o "variant" Variant.encode variant
+    ; field_l "known_implementations"
+        (no_loc (pair Variant.encode Lib_name.encode)) known_implementations
     ; field_o "default_implementation"
         (no_loc Lib_name.encode) default_implementation
     ; field_o "main_module_name" Module.Name.encode main_module_name
@@ -139,7 +140,6 @@ module Lib = struct
     record (
       let* main_module_name = field_o "main_module_name" Module.Name.decode in
       let* implements = field_o "implements" (located Lib_name.decode) in
-      let* variant = field_o "variant" Variant.decode in
       let* default_implementation =
         field_o "default_implementation" (located Lib_name.decode) in
       let* name = field "name" Lib_name.decode in
@@ -162,14 +162,18 @@ module Lib = struct
       and+ requires = libs "requires"
       and+ ppx_runtime_deps = libs "ppx_runtime_deps"
       and+ virtual_ = field_b "virtual"
+      and+ known_implementations = field_l "known_implementations"
+                                     (located (pair Variant.decode
+                                                 Lib_name.decode))
       and+ sub_systems = Sub_system_info.record_parser ()
       and+ orig_src_dir = field_o "orig_src_dir" path
       and+ modules = field_o "modules" (Lib_modules.decode
-                                          ~implements:(Option.is_some implements) ~obj_dir)
-       and+ special_builtin_support =
-         field_o "special_builtin_support"
-           (Syntax.since Stanza.syntax (1, 10) >>>
-            Dune_file.Library.Special_builtin_support.decode)
+                                          ~implements:(Option.is_some
+                                                         implements) ~obj_dir)
+      and+ special_builtin_support =
+        field_o "special_builtin_support"
+          (Syntax.since Stanza.syntax (1, 10) >>>
+           Dune_file.Library.Special_builtin_support.decode)
       in
       let modes = Mode.Dict.Set.of_list modes in
       { kind
@@ -184,8 +188,8 @@ module Lib = struct
       ; requires
       ; ppx_runtime_deps
       ; implements
-      ; variant
       ; default_implementation
+      ; known_implementations
       ; sub_systems
       ; main_module_name
       ; virtual_
@@ -215,7 +219,7 @@ module Lib = struct
   let foreign_archives t = t.foreign_archives
   let requires t = t.requires
   let implements t = t.implements
-  let variant t = t.variant
+  let known_implementations t = t.known_implementations
   let default_implementation t = t.default_implementation
   let modes t = t.modes
   let special_builtin_support t = t.special_builtin_support
