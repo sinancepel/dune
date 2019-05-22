@@ -4,4 +4,7 @@
  (virtual_modules vlibfoo)
 )
 
-(external_variant (vlibfoo somevariant impl))
+(external_variant
+  (virtual_library vlibfoo)
+  (variant somevariant)
+  (implementation impl))

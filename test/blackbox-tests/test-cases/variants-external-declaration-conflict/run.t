@@ -4,7 +4,7 @@ It is forbidden to declare two external implementations with the same variant.
   Entering directory '1'
   Error: Two implementations of vlibfoo have the same variant "somevariant":
   - impl1 (dune:6)
-  - impl2 (dune:7)
+  - impl2 (dune:11)
   [1]
 
 It is forbidden to declare an external implementation and have a local

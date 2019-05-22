@@ -2096,16 +2096,20 @@ module Variant_implementation = struct
 
   let decode =
     let open Stanza.Decoder in
-    let+ (loc, (virtual_lib, variant,implementation)) = located
-      (triple Lib_name.decode Variant.decode Lib_name.decode)
-    and+ project = Dune_project.get_exn ()
-    in
-    { implementation
-    ; virtual_lib
-    ; variant
-    ; project
-    ; loc
-    }
+    record (
+      let+ loc = loc
+      and+ variant = field "variant" Variant.decode
+      and+ virtual_lib = field "virtual_library" Lib_name.decode
+      and+ implementation = field "implementation" Lib_name.decode
+      and+ project = Dune_project.get_exn ()
+      in
+      { implementation
+      ; virtual_lib
+      ; variant
+      ; project
+      ; loc
+      }
+    )
 end
 
 module Copy_files = struct
