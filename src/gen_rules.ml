@@ -295,14 +295,14 @@ module type Gen = sig
   val sctx : Super_context.t
 end
 
-let map_variant relevant_lib_names lib =
+let turn_library_into_external_variant visible_libraries lib =
   match lib with
   | { Library.variant=(Some variant)
     ; implements=(Some (loc, vlib))
     ; project
     ; _} as conf ->
     Option.some_if
-      (Lib_name.Set.mem relevant_lib_names vlib)
+      (Lib_name.Set.mem visible_libraries vlib)
       (External_variant
          { implementation = (Library.best_name conf)
          ; virtual_lib = vlib
@@ -312,11 +312,19 @@ let map_variant relevant_lib_names lib =
          })
   | _ -> None
 
-let map_stanza relevant_lib_names = function
-  | Library lib -> map_variant relevant_lib_names lib
+let map_stanza visible_libraries = function
+  | Library lib -> turn_library_into_external_variant visible_libraries lib
   | _ -> None
 
-let build_name_set pkgs stanzas =
+let filter_out_stanzas_from_hidden_packages visible_libraries pkgs stanzas =
+  List.filter_map stanzas ~f:(fun stanza ->
+    match Dune_file.stanza_package stanza with
+    | Some package when Package.Name.Set.mem pkgs package.name -> Some stanza
+    | None -> Some stanza
+    | Some _ -> map_stanza visible_libraries stanza
+  )
+
+let visible_libraries pkgs stanzas =
   stanzas
   |> List.filter_map
        ~f:(function
@@ -328,14 +336,6 @@ let build_name_set pkgs stanzas =
            Some (Library.best_name conf)
          | _ -> None)
   |> Lib_name.Set.of_list
-
-let relevant_stanzas relevant_lib_names pkgs stanzas =
-  List.filter_map stanzas ~f:(fun stanza ->
-    match Dune_file.stanza_package stanza with
-    | Some package when Package.Name.Set.mem pkgs package.name -> Some stanza
-    | None -> Some stanza
-    | Some _ -> map_stanza relevant_lib_names stanza
-  )
 
 let gen ~contexts
       ?(external_lib_deps_mode=false)
@@ -366,14 +366,14 @@ let gen ~contexts
       match only_packages with
       | None -> stanzas
       | Some pkgs ->
-        let relevant_lib_names =
+        let visible_libraries =
           stanzas
           |> List.concat_map ~f:(fun (dir_conf : Dune_load.Dune_file.t) -> dir_conf.stanzas)
-          |> build_name_set pkgs
+          |> visible_libraries pkgs
         in
         List.map stanzas ~f:(fun (dir_conf : Dune_load.Dune_file.t) ->
           { dir_conf with
-            stanzas = relevant_stanzas relevant_lib_names pkgs dir_conf.stanzas
+            stanzas = filter_out_stanzas_from_hidden_packages visible_libraries pkgs dir_conf.stanzas
           })
     in
     let* (host, stanzas) = Fiber.fork_and_join host stanzas in
