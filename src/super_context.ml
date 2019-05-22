@@ -375,13 +375,11 @@ let create
           | _ -> None))
   in
   let internal_implementations =
-    List.concat_map stanzas
-      ~f:(fun { Dune_load.Dune_file.stanzas; _ } ->
-        List.filter_map stanzas ~f:(fun stanza ->
-          match (stanza : Stanza.t) with
-          | Dune_file.External_variant impl -> Some impl
-          | _ -> None)
-      )
+    Dune_load.Dune_file.fold_stanzas stanzas
+      ~init:[]
+      ~f:(fun _ stanza acc -> match stanza with
+        | Dune_file.External_variant impl -> impl::acc
+        | _ -> acc)
   in
   let scopes, public_libs =
     let lib_config = Context.lib_config context in

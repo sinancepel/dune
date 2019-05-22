@@ -368,7 +368,7 @@ let gen ~contexts
       | Some pkgs ->
         let visible_libraries =
           stanzas
-          |> List.concat_map ~f:(fun (dir_conf : Dune_load.Dune_file.t) -> dir_conf.stanzas)
+          |> Dune_load.Dune_file.fold_stanzas ~init:[] ~f:(fun _ s acc -> s::acc)
           |> visible_libraries pkgs
         in
         List.map stanzas ~f:(fun (dir_conf : Dune_load.Dune_file.t) ->
