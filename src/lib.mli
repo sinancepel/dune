@@ -268,7 +268,7 @@ module DB : sig
     :  ?parent:t
     -> lib_config:Lib_config.t
     -> (Path.Build.t * Dune_file.Library.t) list
-    -> Dune_file.Variant_implementation.t list
+    -> Dune_file.External_variant.t list
     -> t
 
   val create_from_findlib

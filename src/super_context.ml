@@ -379,7 +379,7 @@ let create
       ~f:(fun { Dune_load.Dune_file.stanzas; _ } ->
         List.filter_map stanzas ~f:(fun stanza ->
           match (stanza : Stanza.t) with
-          | Dune_file.Variant_implementation impl -> Some impl
+          | Dune_file.External_variant impl -> Some impl
           | _ -> None)
       )
   in

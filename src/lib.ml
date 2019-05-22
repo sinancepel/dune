@@ -1335,7 +1335,7 @@ module DB = struct
     in
     let variant_map =
       variants_stanzas
-      |> List.map ~f:(fun { Dune_file.Variant_implementation.implementation
+      |> List.map ~f:(fun { Dune_file.External_variant.implementation
                           ; virtual_lib; variant; loc; _} ->
                        (virtual_lib, (variant, (loc, implementation))))
       |> List.rev_append project_implementations

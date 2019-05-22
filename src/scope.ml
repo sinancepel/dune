@@ -119,7 +119,7 @@ module DB = struct
       |> Dune_project.Name.Map.of_list_multi
     in
     let variant_implementations_by_project_name =
-      List.map variant_implementations ~f:(fun (lib : Dune_file.Variant_implementation.t) ->
+      List.map variant_implementations ~f:(fun (lib : Dune_file.External_variant.t) ->
         (Dune_project.name lib.project, lib))
       |> Dune_project.Name.Map.of_list_multi
     in

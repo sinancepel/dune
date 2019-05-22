@@ -303,7 +303,7 @@ let map_variant relevant_lib_names lib =
     ; _} as conf ->
     Option.some_if
       (Lib_name.Set.mem relevant_lib_names vlib)
-      (Variant_implementation
+      (External_variant
          { implementation = (Library.best_name conf)
          ; virtual_lib = vlib
          ; variant

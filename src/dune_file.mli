@@ -450,7 +450,7 @@ module Toplevel : sig
     }
 end
 
-module Variant_implementation : sig
+module External_variant : sig
   type t =
     { implementation : Lib_name.t
     ; virtual_lib : Lib_name.t
@@ -476,7 +476,7 @@ type Stanza.t +=
   | Tests                  of Tests.t
   | Include_subdirs        of Loc.t * Include_subdirs.t
   | Toplevel               of Toplevel.t
-  | Variant_implementation of Variant_implementation.t
+  | External_variant of External_variant.t
 
 val stanza_package : Stanza.t -> Package.t option
 

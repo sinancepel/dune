@@ -2085,7 +2085,7 @@ module Toplevel = struct
     )
 end
 
-module Variant_implementation = struct
+module External_variant = struct
   type t =
     { implementation : Lib_name.t
     ; virtual_lib : Lib_name.t
@@ -2165,7 +2165,7 @@ type Stanza.t +=
   | Tests                  of Tests.t
   | Include_subdirs        of Loc.t * Include_subdirs.t
   | Toplevel               of Toplevel.t
-  | Variant_implementation of Variant_implementation.t
+  | External_variant of External_variant.t
 
 module Stanzas = struct
   type t = Stanza.t list
@@ -2236,8 +2236,8 @@ module Stanzas = struct
        [Tests t])
     ; "external_variant",
       (let+ () = Syntax.since library_variants (0, 2)
-       and+ t = Variant_implementation.decode in
-       [Variant_implementation t])
+       and+ t = External_variant.decode in
+       [External_variant t])
     ; "env",
       (let+ x = Dune_env.Stanza.decode in
        [Dune_env.T x])
