@@ -1340,11 +1340,28 @@ module DB = struct
                        (virtual_lib, (variant, (loc, implementation))))
       |> List.rev_append project_implementations
       |> Lib_name.Map.of_list_multi
+      |> Lib_name.Map.map ~f:Variant.Map.of_list
+      |> Lib_name.Map.mapi ~f:(fun name x -> match x with
+      | Ok x -> x
+      | Error (variant, (loc1, impl1), (loc2, impl2)) ->
+        Errors.fail_opt None
+          "Error: Two implementations of %a have the same variant %a:\n\
+          - %a (%a)\n\
+          - %a (%a)\n"
+          Lib_name.pp name
+          Variant.pp variant
+          Lib_name.pp impl1
+          Loc.pp_file_colon_line loc1
+          Lib_name.pp impl2
+          Loc.pp_file_colon_line loc2
+      )
     in
     let map =
       List.concat_map lib_stanzas ~f:(fun (dir, (conf : Dune_file.Library.t)) ->
-        let variants =  Lib_name.Map.Multi.find
-                          variant_map (Dune_file.Library.best_name conf) in
+        let variants =
+          Lib_name.Map.find variant_map (Dune_file.Library.best_name conf)
+          |> Option.value ~default:Variant.Map.empty
+        in
         let info = Lib_info.of_library_stanza ~dir ~lib_config variants conf in
         match conf.public with
         | None ->
@@ -1673,11 +1690,6 @@ let to_dune_lib ({ name ; info ; _ } as lib) ~lib_modules ~foreign_objects ~dir=
     | External f -> f
     | Local -> foreign_objects
   in
-  let known_implementations =
-    info.known_implementations
-    |> Variant.Map.to_list
-    |> List.map ~f:(fun (v,(l,n)) -> (l,(v,n)))
-  in
   Dune_package.Lib.make
     ~obj_dir
     ~orig_src_dir
@@ -1695,7 +1707,7 @@ let to_dune_lib ({ name ; info ; _ } as lib) ~lib_modules ~foreign_objects ~dir=
     ~ppx_runtime_deps:(add_loc (ppx_runtime_deps_exn lib))
     ~modes:info.modes
     ~implements:info.implements
-    ~known_implementations
+    ~known_implementations:info.known_implementations
     ~default_implementation:info.default_implementation
     ~virtual_
     ~modules:(Some lib_modules)

@@ -19,7 +19,7 @@ module Lib = struct
     ; ppx_runtime_deps : (Loc.t * Lib_name.t) list
     ; sub_systems      : 'sub_system Sub_system_name.Map.t
     ; virtual_         : bool
-    ; known_implementations : (Loc.t * (Variant.t * Lib_name.t)) list
+    ; known_implementations :  (Loc.t * Lib_name.t) Variant.Map.t
     ; default_implementation  : (Loc.t * Lib_name.t)  option
     ; implements       : (Loc.t * Lib_name.t) option
     ; modules          : Lib_modules.t option
@@ -96,6 +96,7 @@ module Lib = struct
     let paths name f = field_l name path f in
     let mode_paths name (xs : Path.t Mode.Dict.List.t) =
       field_l name sexp (Mode.Dict.List.encode path xs) in
+    let known_implementations = Variant.Map.to_list known_implementations in
     let libs name = field_l name (no_loc Lib_name.encode) in
     record_fields @@
     [ field "name" Lib_name.encode name
@@ -112,7 +113,7 @@ module Lib = struct
     ; libs "ppx_runtime_deps" ppx_runtime_deps
     ; field_o "implements" (no_loc Lib_name.encode) implements
     ; field_l "known_implementations"
-        (no_loc (pair Variant.encode Lib_name.encode)) known_implementations
+        (pair Variant.encode (no_loc Lib_name.encode)) known_implementations
     ; field_o "default_implementation"
         (no_loc Lib_name.encode) default_implementation
     ; field_o "main_module_name" Module.Name.encode main_module_name
@@ -163,8 +164,8 @@ module Lib = struct
       and+ ppx_runtime_deps = libs "ppx_runtime_deps"
       and+ virtual_ = field_b "virtual"
       and+ known_implementations = field_l "known_implementations"
-                                     (located (pair Variant.decode
-                                                 Lib_name.decode))
+                                     (pair Variant.decode
+                                             (located Lib_name.decode))
       and+ sub_systems = Sub_system_info.record_parser ()
       and+ orig_src_dir = field_o "orig_src_dir" path
       and+ modules = field_o "modules" (Lib_modules.decode
@@ -175,6 +176,8 @@ module Lib = struct
           (Syntax.since Stanza.syntax (1, 10) >>>
            Dune_file.Library.Special_builtin_support.decode)
       in
+      let known_implementations =
+        Variant.Map.of_list_exn known_implementations in
       let modes = Mode.Dict.Set.of_list modes in
       { kind
       ; name

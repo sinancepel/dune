@@ -72,7 +72,7 @@ type t = private
 val of_library_stanza
   :  dir:Path.Build.t
   -> lib_config:Lib_config.t
-  -> (Variant.t * (Loc.t * Lib_name.t)) list
+  -> (Loc.t * Lib_name.t) Variant.Map.t
   -> Dune_file.Library.t
   -> t
 

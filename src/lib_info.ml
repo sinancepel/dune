@@ -96,7 +96,7 @@ let user_written_deps t =
 let of_library_stanza ~dir
       ~lib_config:({ Lib_config.has_native; ext_lib; ext_obj; _ }
                    as lib_config)
-      (known_implementations : (Variant.t * (Loc.t * Lib_name.t)) list)
+      (known_implementations : (Loc.t * Lib_name.t) Variant.Map.t)
       (conf : Dune_file.Library.t) =
   let (_loc, lib_name) = conf.name in
   let obj_dir =
@@ -164,22 +164,6 @@ let of_library_stanza ~dir
   in
   let main_module_name = Dune_file.Library.main_module_name conf in
   let name = Dune_file.Library.best_name conf in
-  let known_implementations =
-    Variant.Map.of_list known_implementations
-    |> function
-    | Ok x -> x
-    | Error (variant, (loc1, impl1), (loc2, impl2)) ->
-      Errors.fail_opt None
-        "Error: Two implementations of %a have the same variant %a:\n\
-         - %a (%a)\n\
-         - %a (%a)\n"
-        Lib_name.pp name
-        Variant.pp variant
-        Lib_name.pp impl1
-        Loc.pp_file_colon_line loc1
-        Lib_name.pp impl2
-        Loc.pp_file_colon_line loc2
-  in
   let modes = Dune_file.Mode_conf.Set.eval ~has_native conf.modes in
   let enabled =
     let enabled_if_result =
@@ -244,11 +228,6 @@ let of_dune_lib dp =
     Lib.wrapped dp
     |> Option.map ~f:(fun w -> Dune_file.Library.Inherited.This w)
   in
-  let known_implementations =
-    Lib.known_implementations dp
-    |> List.map ~f:(fun (l,(v,n)) -> (v,(l,n)))
-    |> Variant.Map.of_list_exn
-  in
   let obj_dir = Lib.obj_dir dp in
   { loc = Lib.loc dp
   ; name = Lib.name dp
@@ -276,7 +255,7 @@ let of_dune_lib dp =
   ; virtual_
   ; implements = Lib.implements dp
   ; variant = None
-  ; known_implementations
+  ; known_implementations = Lib.known_implementations dp
   ; default_implementation = Lib.default_implementation dp
   ; modes = Lib.modes dp
   ; wrapped
