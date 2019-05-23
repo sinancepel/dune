@@ -1,6 +1,11 @@
 unreleased
 ----------
 
+- Redesign of the library variant feature according to the #2134 proposal. The
+  set of variants is now computed when the virtual library is installed.
+  Introducing a new `external_variant` stanza. (#2169, @TheLortex, review by
+  @diml)
+
 - Restricted the set of variables available for expansion in the destination
   filename of `install` stanza to simplify implementation and avoid dependency
   cycles. (#2073, @aalekseyev, @diml)
