@@ -324,18 +324,14 @@ let filter_out_stanzas_from_hidden_packages visible_libraries pkgs stanzas =
     | Some _ -> map_stanza visible_libraries stanza
   )
 
-let visible_libraries pkgs stanzas =
-  stanzas
-  |> List.filter_map
-       ~f:(function
-         | Library
-             ({ public = Some { package; _ }
-              ; _
-              } as conf)
-           when (Package.Name.Set.mem pkgs package.name) ->
-           Some (Library.best_name conf)
-         | _ -> None)
-  |> Lib_name.Set.of_list
+let visible_libraries pkgs =
+  Dune_load.Dune_file.fold_stanzas
+    ~init:Lib_name.Set.empty
+    ~f:(fun _ s set -> match s with
+      | Library ({ public = Some { package; _ }; _} as conf)
+          when (Package.Name.Set.mem pkgs package.name) ->
+            Lib_name.Set.add set (Library.best_name conf)
+      | _ -> set)
 
 let gen ~contexts
       ?(external_lib_deps_mode=false)
@@ -366,11 +362,7 @@ let gen ~contexts
       match only_packages with
       | None -> stanzas
       | Some pkgs ->
-        let visible_libraries =
-          stanzas
-          |> Dune_load.Dune_file.fold_stanzas ~init:[] ~f:(fun _ s acc -> s::acc)
-          |> visible_libraries pkgs
-        in
+        let visible_libraries = visible_libraries pkgs stanzas in
         List.map stanzas ~f:(fun (dir_conf : Dune_load.Dune_file.t) ->
           { dir_conf with
             stanzas = filter_out_stanzas_from_hidden_packages visible_libraries pkgs dir_conf.stanzas
