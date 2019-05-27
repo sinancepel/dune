@@ -1320,6 +1320,33 @@ module DB = struct
       | Hidden (_, _) -> assert false
       | Not_found -> assert false)
 
+  let extract_loc_from_variant_map vmap =
+    Variant.Map.choose vmap
+    |> Option.map
+         ~f:(fun (_, (loc, _)) -> loc)
+
+  let check_valid_external_variants
+        (libmap : resolve_result Lib_name.Map.t)
+        (variant_map : (Loc.t * Lib_name.t) Variant.Map.t Lib_name.Map.t) =
+    let do_the_check vlib variants =
+      let loc = extract_loc_from_variant_map variants in
+      match Lib_name.Map.find libmap vlib with
+      | None ->
+        Errors.fail_opt loc
+          "Virtual library %a hasn't been found in the project."
+          Lib_name.pp vlib
+      | Some (Found (lib : Lib_info.t)) when Option.is_none lib.virtual_ ->
+        Errors.fail_opt loc
+          "Library %a isn't a virtual library."
+          Lib_name.pp vlib
+      | Some (Redirect (None, best_name)) ->
+        Errors.fail_opt loc
+          "To declare variants you must use %a's public name,@ which is %a."
+          Lib_name.pp vlib Lib_name.pp best_name
+      | _ -> ()
+    in
+    Lib_name.Map.iteri variant_map ~f:do_the_check
+
   let create_from_library_stanzas ?parent ~lib_config lib_stanzas
         variants_stanzas =
     (* Lookup the local scope to find implementations*)
@@ -1342,18 +1369,18 @@ module DB = struct
       |> Lib_name.Map.of_list_multi
       |> Lib_name.Map.map ~f:Variant.Map.of_list
       |> Lib_name.Map.mapi ~f:(fun name x -> match x with
-      | Ok x -> x
-      | Error (variant, (loc1, impl1), (loc2, impl2)) ->
-        Errors.fail_opt None
-          "Error: Two implementations of %a have the same variant %a:\n\
-          - %a (%a)\n\
-          - %a (%a)\n"
-          Lib_name.pp name
-          Variant.pp variant
-          Lib_name.pp impl1
-          Loc.pp_file_colon_line loc1
-          Lib_name.pp impl2
-          Loc.pp_file_colon_line loc2
+        | Ok x -> x
+        | Error (variant, (loc1, impl1), (loc2, impl2)) ->
+          Errors.fail_opt None
+            "Error: Two implementations of %a have the same variant %a:\n\
+             - %a (%a)\n\
+             - %a (%a)\n"
+            Lib_name.pp name
+            Variant.pp variant
+            Lib_name.pp impl1
+            Loc.pp_file_colon_line loc1
+            Lib_name.pp impl2
+            Loc.pp_file_colon_line loc2
       )
     in
     let map =
@@ -1398,6 +1425,7 @@ module DB = struct
             (Loc.to_file_colon_line loc2)
     in
     check_valid_implementations map;
+    check_valid_external_variants map variant_map;
     create () ?parent
       ~resolve:(fun name ->
         Lib_name.Map.find map name

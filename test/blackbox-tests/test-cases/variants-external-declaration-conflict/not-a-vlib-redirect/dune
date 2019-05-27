@@ -1,0 +1,9 @@
+(library
+ (name libfoo)
+ (public_name another-name)
+)
+
+(external_variant
+  (virtual_library libfoo)
+  (variant somevariant)
+  (implementation impl1))

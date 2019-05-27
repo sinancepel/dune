@@ -24,3 +24,33 @@ implementation with the same variant.
   - impl1 (vlib/dune:6)
   [1]
 
+  $ dune build --root not-a-vlib
+  Entering directory 'not-a-vlib'
+  File "dune", line 5, characters 0-94:
+  5 | (external_variant
+  6 |   (virtual_library libfoo)
+  7 |   (variant somevariant)
+  8 |   (implementation impl1))
+  Error: Library libfoo isn't a virtual library.
+  [1]
+
+  $ dune build --root not-a-vlib-redirect
+  Entering directory 'not-a-vlib-redirect'
+  File "dune", line 6, characters 0-94:
+  6 | (external_variant
+  7 |   (virtual_library libfoo)
+  8 |   (variant somevariant)
+  9 |   (implementation impl1))
+  Error: To declare variants you must use libfoo's public name,
+  which is another-name.
+  [1]
+
+  $ dune build --root vlib-dont-exist
+  Entering directory 'vlib-dont-exist'
+  File "dune", line 1, characters 0-100:
+  1 | (external_variant
+  2 |   (virtual_library i-dont-exist)
+  3 |   (variant somevariant)
+  4 |   (implementation impl1))
+  Error: Virtual library i-dont-exist hasn't been found in the project.
+  [1]
