@@ -197,6 +197,17 @@ a ``deps`` field the the ``inline_tests`` field. The argument of this
            (inline_tests (deps data.txt))
            (preprocess (pps ppx_expect)))
 
+Running a single test
+---------------------
+
+If you would only like to run a single test for your project, you may use
+``dune exec`` to run the test executable (for the sake of this example, 
+``project/tests/myTest.ml``):
+
+.. code:: bash
+
+          dune exec project/tests/myTest.exe
+
 Passing special arguments to the test runner
 --------------------------------------------
 
